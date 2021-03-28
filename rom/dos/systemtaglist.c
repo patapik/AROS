@@ -1,5 +1,5 @@
 /*
-    Copyright © 1995-2017, The AROS Development Team. All rights reserved.
+    Copyright ï¿½ 1995-2017, The AROS Development Team. All rights reserved.
     $Id$
 
     Desc:
@@ -129,6 +129,11 @@
 
     ASSERT_VALID_PROCESS(me);
     D(bug("SystemTagList('%s',%p)\n", command, tags));
+
+    D(
+    		if( isCLI )
+    			bug("SystemTagList() using BCPL compatible CLI\n" );
+    		);
 
     sis = Input();
     sos = Output();

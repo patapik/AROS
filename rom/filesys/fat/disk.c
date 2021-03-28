@@ -1,8 +1,8 @@
 /*
  * fat-handler - FAT12/16/32 filesystem handler
  *
- * Copyright © 2006 Marek Szyprowski
- * Copyright © 2007-2015 The AROS Development Team
+ * Copyright ï¿½ 2006 Marek Szyprowski
+ * Copyright ï¿½ 2007-2015 The AROS Development Team
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the same terms as AROS itself.
@@ -206,11 +206,9 @@ LONG AccessDisk(BOOL do_write, ULONG num, ULONG nblocks, ULONG block_size,
     {
         glob->diskioreq->iotd_Req.io_Offset = off & 0xFFFFFFFF;
         glob->diskioreq->iotd_Req.io_Actual = off >> 32;
-
         glob->diskioreq->iotd_Req.io_Length = nblocks * block_size;
         glob->diskioreq->iotd_Req.io_Data = data;
-        glob->diskioreq->iotd_Req.io_Command =
-            do_write ? glob->writecmd : glob->readcmd;
+        glob->diskioreq->iotd_Req.io_Command = do_write ? glob->writecmd : glob->readcmd;
 
         err = DoIO((struct IORequest *)glob->diskioreq);
 

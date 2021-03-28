@@ -45,10 +45,12 @@
 #include <aros/symbolsets.h>
 
 #include <dos/filehandler.h>
+#include <resources/filesysres.h>
 
 #include <proto/exec.h>
 #include <proto/disk.h>
 #include <proto/expansion.h>
+#include <clib/dos_protos.h>
 
 #include "common.h"
 
@@ -67,6 +69,19 @@
 #define bug(x,args...)   asm("nop\r\n")
 #define debug(x,args...) asm("nop\r\n")
 #endif
+
+#define MAX_DISK_BLOCK_SIZE 512
+#define NULL_BLOCK 0xFFFFFFFF
+#define DOSTYPE_DOS3 0x444f5305
+#define DOSTYPE_FAT95 0x46415402
+#define SUPPORT_FOREIGN_FILESYSTEMS 0
+#define AUTOMOUNT_FAT_PARTITIONS 1
+
+static void SAGASD_BootNode(
+        struct SAGASDBase *SAGASDBase,
+        struct Library *ExpansionBase,
+        ULONG unit);
+
 
 static VOID SAGASD_log(struct sdcmd *sd, int level, const char *format, ...)
 {
@@ -669,12 +684,35 @@ static void SAGASD_Detect(struct Library *SysBase, struct SAGASDUnit *sdu)
             sdu->sdu_Valid = (sderr == 0) ? TRUE : FALSE;
             debug("========= sdu_Valid: %s", sdu->sdu_Valid ? "TRUE" : "FALSE");
             debug("========= Blocks: %ld", sdu->sdu_SDCmd.info.blocks);
-            Permit();
+            //Add the boot nodes
+            struct Library *ExpansionBase = TaggedOpenLibrary(TAGGEDOPEN_EXPANSION);
+            if( ExpansionBase && sdu->sdu_SDCmd.info.blocks && sdu->sdu_SAGASDBase )
+            {
+            	SAGASD_BootNode( sdu->sdu_SAGASDBase, ExpansionBase, 0 );
+
+            	/*
+            	sdu->sdu_dosList = MakeDosEntry( sdu->sdu_Name, DLT_DEVICE );
+            	if( sdu->sdu_dosList  )
+            	{
+            		debug("========= Attempting to add to doslist" );
+            		if (AttemptLockDosList(LDF_DEVICES|LDF_VOLUMES|LDF_WRITE))
+					{
+						AddDosEntry( sdu->sdu_dosList  );
+						UnLockDosList(LDF_DEVICES|LDF_VOLUMES|LDF_WRITE);
+					}
+            	}else
+            	{
+            		debug("========= Unable to add to doslist." );
+            	}
+            	*/
+                Permit();
+            }
         } else {
             Forbid();
             sdu->sdu_Present = FALSE;
             sdu->sdu_Valid = FALSE;
             Permit();
+            debug( "SD Card ejected!");
         }
     }
 }
@@ -876,6 +914,372 @@ static UBYTE* BSTRtoCSTR( BSTR string )
 	output[ size ] = 0;
 	return output;
 }
+#if SUPPORT_FOREIGN_FILESYSTEMS
+#define LSEGDATASIZE (123 * sizeof(ULONG))
+
+struct FileSysReader
+{
+    ULONG count;
+    ULONG offset;
+    ULONG size;
+    struct FileSysHeaderBlock *fshBlock;
+    struct SAGASDBase *SAGASDBase;
+    ULONG DiskUnit;
+};
+
+static AROS_UFH4(LONG, ReadFunc,
+	AROS_UFHA(BPTR, file,   D1),
+	AROS_UFHA(APTR, buffer, D2),
+	AROS_UFHA(LONG, length, D3),
+	AROS_UFHA(struct Library *, DOSBase, A6))
+{
+    AROS_USERFUNC_INIT
+
+	struct FileSysReader *fsr = (struct FileSysReader*)file;
+    struct SAGASDUnit *sdu = &fsr->SAGASDBase->sd_Unit[ fsr->DiskUnit ];
+	struct Library *SysBase = fsr->SAGASDBase->sd_ExecBase;
+	UBYTE lsbBuffer[ MAX_DISK_BLOCK_SIZE ];
+	struct LoadSegBlock *lsbBlock = (struct LoadSegBlock *)lsbBuffer;
+    LONG outsize;
+    ULONG block;
+    ULONG blockCount;
+    ULONG bufferOffset;
+    ULONG bytesToCopy;
+
+    //First we need to fast forward to the correct block
+    //in which we will find the current offset.
+    block = fsr->fshBlock->fhb_SegListBlocks;
+	while( block != NULL_BLOCK )
+	{
+		//Load the next block
+		bug( "%s Jumping to block %d\n", __FUNCTION__, block );
+		sdcmd_read_block( &sdu->sdu_SDCmd, block, lsbBuffer );
+
+		//Do we have a segment?
+		if( lsbBlock->lsb_ID != IDNAME_LOADSEG )
+			break;
+		blockCount++;
+
+		//Are we at the correct block for the offset?
+		if( blockCount * LSEGDATASIZE >= fsr->offset )
+			break;
+
+		//Load the next one
+		block = lsbBlock->lsb_Next;
+
+		//Is the next block valid?
+		if( block == NULL_BLOCK )
+			break;
+	}
+
+	//Now read the bytes into the buffer
+	bufferOffset = 0;
+	while( length )
+	{
+		bytesToCopy = ( length > LSEGDATASIZE ? LSEGDATASIZE : length );
+		CopyMem( lsbBlock->lsb_LoadData, buffer + bufferOffset, bytesToCopy );
+		length-=bytesToCopy;
+		outsize+=bytesToCopy;
+
+		//get the next block in the seg list
+		block = lsbBlock->lsb_Next;
+
+		//Is the next block valid?
+		if( block == NULL_BLOCK )
+			break;
+
+		//read the next block
+		bug( "%s Reading block %d\n", __FUNCTION__, block );
+		sdcmd_read_block( &sdu->sdu_SDCmd, block, lsbBuffer );
+	}
+
+	bug( "%s Read %d bytes\n", __FUNCTION__, outsize );
+    return outsize;
+
+    AROS_USERFUNC_EXIT
+}
+
+
+//Borrowed from partitionrdb.c in AROS
+static AROS_UFH4(LONG, SeekFunc,
+	AROS_UFHA(BPTR, file,   D1),
+	AROS_UFHA(LONG, pos,    D2),
+	AROS_UFHA(LONG, mode,   D3),
+	AROS_UFHA(struct Library *, DOSBase, A6))
+{
+    AROS_USERFUNC_INIT
+
+	bug( "%s\n", __FUNCTION__);
+
+    struct FileSysReader *fsr = (struct FileSysReader*)file;
+    LONG oldpos = fsr->offset;
+
+    switch (mode) {
+    case OFFSET_BEGINNING: break;
+    case OFFSET_END:       pos = fsr->size - pos; break;
+    case OFFSET_CURRENT:   pos = fsr->offset + pos; break;
+    default: return -1;
+    }
+
+    if (pos < 0 || pos >= fsr->size)
+    	return -1;
+
+    fsr->offset = pos;
+
+    return oldpos;
+
+    AROS_USERFUNC_EXIT
+}
+
+static ULONG getNumberOfSegListBlocks( struct SAGASDUnit *sdu, struct FileSysHeaderBlock *fshBlock )
+{
+	bug( "%s\n", __FUNCTION__ );
+	ULONG size;
+	UBYTE lsbBuffer[ MAX_DISK_BLOCK_SIZE ];
+	struct LoadSegBlock *lsbBlock = (struct LoadSegBlock *)lsbBuffer;
+	ULONG block;
+
+	//Just cycle through the blocks in the list
+	block = fshBlock->fhb_SegListBlocks;
+	size = 0;
+	while( block != NULL_BLOCK )
+	{
+		//Load the next block
+		//bug( "%s Reading block %d\n", __FUNCTION__, block );
+		sdcmd_read_block( &sdu->sdu_SDCmd, block, lsbBuffer );
+
+		//Do we have a segment?
+		if( lsbBlock->lsb_ID != IDNAME_LOADSEG )
+			break;
+		size++;
+
+		//Load the next one
+		block = lsbBlock->lsb_Next;
+
+		//Is the next block valid?
+		if( block == NULL_BLOCK )
+			break;
+	}
+
+	bug( "%s File System Seg List has %d blocks\n", __FUNCTION__, size );
+	return size;
+}
+
+/* Load a filesystem into DOS seglist */
+static BPTR LoadFS( struct SAGASDBase *SAGASDBase, ULONG DiskUnit, struct FileSysHeaderBlock *fshBlock,  struct DosLibrary *DOSBase )
+{
+	bug( "%s\n", __FUNCTION__);
+	struct SAGASDUnit *sdu = &SAGASDBase->sd_Unit[ DiskUnit ];
+	struct Library *SysBase = SAGASDBase->sd_ExecBase;
+    LONG_FUNC FunctionArray[4];
+    struct FileSysReader fakefile;
+
+    FunctionArray[0] = (LONG_FUNC)ReadFunc;
+    FunctionArray[1] = (LONG_FUNC)__AROS_GETVECADDR(SysBase,33); /* AllocMem() */
+    FunctionArray[2] = (LONG_FUNC)__AROS_GETVECADDR(SysBase,35); /* FreeMem() */
+    FunctionArray[3] = (LONG_FUNC)SeekFunc;
+
+    //We need to get the number of blocks in the seg list
+    ULONG numberOfBlocks = getNumberOfSegListBlocks( sdu, fshBlock );
+
+    /* Initialize our stream */
+    bug( "%s Setting up our fake file for loading the file system\n", __FUNCTION__);
+    fakefile.count      = 0;
+    fakefile.offset     = 0;
+    fakefile.size       = LSEGDATASIZE * numberOfBlocks;
+    fakefile.SAGASDBase = SAGASDBase;
+    fakefile.DiskUnit	= DiskUnit;
+    fakefile.fshBlock	= fshBlock;
+
+    bug( "%s Calling InternalLoadSeg\n", __FUNCTION__);
+    /* InternalLoadSeg((BPTR)&fakefile, BNULL, FunctionArray, NULL);
+     * with A6 = NULL. Check internalloadseg.c for more information
+     */
+    return AROS_CALL4(BPTR, __AROS_GETVECADDR(DOSBase, 126),
+        AROS_LCA(BPTR, (BPTR)&fakefile, D0),
+        AROS_LCA(BPTR, BNULL, A0),
+        AROS_LCA(LONG_FUNC*, FunctionArray, A1),
+        AROS_LCA(LONG*, NULL, A2),
+        struct Library*, NULL);
+}
+
+
+
+static struct FileSysEntry *locateFilesystemOnDisk(
+		struct SAGASDBase *SAGASDBase,
+		ULONG DiskUnit,
+		struct FileSysResource *fileSysResBase,
+		struct RigidDiskBlock *RDBBlock,
+		ULONG DosTypeIdentifier )
+{
+    struct SAGASDUnit *sdu = &SAGASDBase->sd_Unit[ DiskUnit ];
+	struct Library *SysBase = SAGASDBase->sd_ExecBase;
+	struct FileSysEntry *fileSysResEntry;
+	UBYTE fshBlockBuffer[ MAX_DISK_BLOCK_SIZE ];
+	UBYTE lsBlockBuffer[ MAX_DISK_BLOCK_SIZE ];
+	struct FileSysHeaderBlock *fshBlock = (struct FileSysHeaderBlock *)fshBlockBuffer;
+	struct LoadSegBlock *segBlock = (struct LoadSegBlock *)lsBlockBuffer;
+	struct DosLibrary *DOSBase;
+
+	//Do we have a filesystemheader block?
+	if( RDBBlock->rdb_FileSysHeaderList == NULL_BLOCK )
+	{
+		bug( "%s No file system header list on disk.\n", __FUNCTION__ );
+		return NULL;
+	}
+
+	//Load the filesystem header block
+	ULONG nextBlock = RDBBlock->rdb_FileSysHeaderList;
+	while( nextBlock != NULL_BLOCK )
+	{
+		//get the current block
+		sdcmd_read_block( &sdu->sdu_SDCmd, nextBlock, fshBlockBuffer );
+
+		//Is it a valid block?
+		if( fshBlock->fhb_ID != IDNAME_FILESYSHEADER )
+		{
+			bug( "%s file system header block corrupt (invalid ID).  Aborting.\n" );
+			return NULL;
+		}
+
+		//Just some debug
+		bug( "%s Found on disk file system resource.\n", __FUNCTION__ );
+		bug( "%s Dos Type 0x%0.8lx\n", __FUNCTION__, fshBlock->fhb_DosType );
+		bug( "%s Version 0x%0.8lx\n", __FUNCTION__, fshBlock->fhb_DosType );
+
+		//Is this the dos type we are looking for?
+		if( fshBlock->fhb_DosType == DosTypeIdentifier )
+		{
+			bug( "%s File system 0x%0.8lx is the one we wanted!\n", __FUNCTION__, fshBlock->fhb_DosType );
+
+			//Now we need to setup a file system resource
+			fileSysResEntry = (struct FileSysEntry*)AllocVec( sizeof( struct FileSysEntry ), MEMB_PUBLIC|MEMF_CLEAR );
+
+			//Fill it out our new entry
+			bug( "%s Creating new File System Resource Entry for file system 0x%0.8lx\n", __FUNCTION__, DosTypeIdentifier );
+			fileSysResEntry->fse_DosType = fshBlock->fhb_DosType;
+			fileSysResEntry->fse_Version = fshBlock->fhb_Version;
+			fileSysResEntry->fse_PatchFlags = fshBlock->fhb_PatchFlags;
+			fileSysResEntry->fse_Type = fshBlock->fhb_Type;
+			fileSysResEntry->fse_Task = fshBlock->fhb_Task;
+			fileSysResEntry->fse_Lock = (BPTR)NULL;
+			fileSysResEntry->fse_Handler = (BPTR)NULL;
+			fileSysResEntry->fse_StackSize = fshBlock->fhb_StackSize;
+			fileSysResEntry->fse_Priority = fshBlock->fhb_Priority;
+			fileSysResEntry->fse_Startup = (BPTR)NULL;
+			fileSysResEntry->fse_SegList = (BPTR)NULL;
+			fileSysResEntry->fse_GlobalVec = (BPTR)NULL;
+
+			//We need a dos base to do the InternalSegLoad
+			bug( "%s Getting DOSBase.\n", __FUNCTION__ );
+			DOSBase = TaggedOpenLibrary( TAGGEDOPEN_DOS );
+			//DOSBase = (struct DosLibrary *)OpenLibrary( "dos.library", 0 );
+			bug( "%s Back from getting DOSBase.\n", __FUNCTION__ );
+			//If we couldn't load the dos library, get it from ROM
+			if( DOSBase == NULL )
+			{
+				bug( "%s Couldn't open the DOS library.  Initialising ROM resident DOS library.\n", __FUNCTION__ );
+				struct Resident *DOSResident = FindResident( TAGGEDOPEN_DOS );
+				if( DOSResident )
+				{
+					bug( "%s Found DOS Resident.  Initialising.\n", __FUNCTION__ );
+					DOSBase = (struct DosLibrary *)InitResident( DOSResident, NULL );
+					if( DOSBase )
+					{
+						bug( "%s DOSBase initialised.\n", __FUNCTION__ );
+					}else
+					{
+						bug( "%s Failed to initialise DOSBase.\n", __FUNCTION__ );
+					}
+				}else
+				{
+					bug( "%s Failed to find DOS Resident.\n", __FUNCTION__ );
+				}
+			}
+
+
+			//Check that we have a dos base now
+			if( DOSBase == NULL )
+			{
+				bug( "%s Unable to load DOSBase.  DOS Type 0x%0.8lx Partitions will not be mounted.\n",__FUNCTION__, DosTypeIdentifier );
+				FreeVec( fileSysResEntry );
+				return NULL;
+			}
+
+			//Now we need to get the size of the seglist.  Sadly this means going through the list at least once.
+			BPTR segList = LoadFS( SAGASDBase, DiskUnit, fshBlock, DOSBase );
+			if( segList )
+			{
+				bug( "%s SegList for file system obtained.  Let's add this as a file system resource now.\n", __FUNCTION__ );
+				fileSysResEntry->fse_SegList = segList;
+
+				//Now let's add this to the file system resource
+				//TODO:  Do this
+
+				return fileSysResEntry;
+			}else
+			{
+				//We need to free this memory since we failed to load the seg list
+				bug( "%s We didn't get a SegList for the file system.  This partition will not be bootable.\n", __FUNCTION__ );
+				FreeVec( fileSysResEntry );
+				return NULL;
+			}
+		}
+
+		//Get the next file system on disk
+		nextBlock = fshBlock->fhb_Next;
+	}
+
+	//Sorry, nothing found.
+	bug( "%s Unable to add the file system dos type 0x%0.8lx\n", __FUNCTION__, DosTypeIdentifier );
+	return NULL;
+}
+
+static struct FileSysEntry *getFilesystemResourceEntry(
+		struct SAGASDBase *SAGASDBase,
+		ULONG DiskUnit,
+		struct RigidDiskBlock *RDBBlock,
+		ULONG DosTypeIdentifier )
+{
+	bug( "%s\n", __FUNCTION__ );
+	struct Library *SysBase = SAGASDBase->sd_ExecBase;
+	struct FileSysResource *fileSysResBase;
+	struct FileSysEntry *fileSysResEntry;
+
+	//Open the file system resource
+	if( !(fileSysResBase = ( struct FileSysResource * ) OpenResource( FSRNAME ) ) )
+	{
+		bug( "%s Unable to open the Filesystem Resource Base.\n", __FUNCTION__ );
+		return NULL;
+	}
+
+	//Search the list of file system resources for the requested Dos Type Identifier
+	Forbid();
+	for( fileSysResEntry = (struct FileSysEntry *)fileSysResBase->fsr_FileSysEntries.lh_Head;
+			fileSysResEntry->fse_Node.ln_Succ;
+			fileSysResEntry = (struct FileSysEntry *)fileSysResEntry->fse_Node.ln_Succ
+		)
+	{
+		//bug( "%s Checking if file system dos type 0x%0.8lx matches desired ( 0x%0.8lx )\n", __FUNCTION__, fileSysResEntry->fse_DosType, DosTypeIdentifier );
+		if( fileSysResEntry->fse_DosType == DosTypeIdentifier )
+		{
+			Permit();
+			bug( "%s Found Dos Type 0x%0.8lx in filesystem.resource.\n", __FUNCTION__, fileSysResEntry->fse_DosType );
+			return fileSysResEntry;
+		}
+	}
+	Permit();
+
+	//If we have reached this point, the filesystem resource doesn't contain the dos type we need
+	//Next step is to check the file system block on disk.
+	//sadly, this can only be done once DOSBase is available.
+	//So we create a task for waiting on DOSBase and loading the file system after.
+	//TODO:  Implement this for AOS
+
+	return NULL;
+}
+#endif
+
 
 static void SAGASD_BootNode(
         struct SAGASDBase *SAGASDBase,
@@ -885,25 +1289,22 @@ static void SAGASD_BootNode(
     struct Library *SysBase = SAGASDBase->sd_ExecBase;
     struct SAGASDUnit *sdu = &SAGASDBase->sd_Unit[unit];
     TEXT dosdevname[4] = "SD0";
-    IPTR pp[4 + DE_BOOTBLOCKS + 1] = {};
+    IPTR pp[4 + DE_BOOTBLOCKS + 1];
     struct DeviceNode *devnode;
-
-    //debug("");
 
     dosdevname[2] += unit;
     debug("Adding bootnode %s %d x %d", dosdevname,sdu->sdu_SDCmd.info.blocks, sdu->sdu_SDCmd.info.block_size);
 
-    //const ULONG IdDOS = AROS_MAKE_ID('D','O','S','\001');
 
-    //See if we have an RDB block
-    UBYTE rdbBuffer[ 512 ];
-    UBYTE partBuffer[ 512 ];
+    //See if we have an RDB block - I think this is only needed for AOS
+    UBYTE rdbBuffer[ MAX_DISK_BLOCK_SIZE ];
+    UBYTE partBuffer[ MAX_DISK_BLOCK_SIZE ];
     struct RigidDiskBlock *rdbBlock = (struct RigidDiskBlock*)rdbBuffer;
     struct PartitionBlock *partBlock = (struct PartitionBlock*)partBuffer;
-    for( ULONG block = 0; block < 16; block++ )
+    for( ULONG block = 0; block < 16 && !SAGASDBase->sd_IsAROS; block++ )
     {
     	//Get the block
-    	debug( "%s Checking block %d\n", __FUNCTION__, block );
+    	//debug( "%s Checking block %d\n", __FUNCTION__, block );
     	sdcmd_read_block( &sdu->sdu_SDCmd, block, rdbBuffer );
 
     	//Is this an RDB Block?
@@ -918,7 +1319,8 @@ static void SAGASD_BootNode(
     		if( rdbBlock->rdb_PartitionList )
     		{
     			//Is the partition block beyond our disk size?
-				if( rdbBlock->rdb_PartitionList > sdu->sdu_SDCmd.info.blocks )
+				if( 	rdbBlock->rdb_PartitionList > sdu->sdu_SDCmd.info.blocks ||
+						rdbBlock->rdb_PartitionList == NULL_BLOCK )
 				{
 					bug( "%s Partition block is at block %d but we only have %d blocks on disk.\n", __FUNCTION__, rdbBlock->rdb_PartitionList, sdu->sdu_SDCmd.info.blocks );
 					return;
@@ -936,7 +1338,8 @@ static void SAGASD_BootNode(
 				    pp[1] = (IPTR)"sagasd.device";
 				    pp[2] = unit;
 				    pp[3] = partBlock->pb_DevFlags;
-				    CopyMem( partBlock->pb_Environment, &pp[ 4 ], sizeof( partBlock->pb_Environment ) );
+				    //CopyMem( partBlock->pb_Environment, &pp[ 4 ], sizeof( partBlock->pb_Environment ) );
+				    memcpy( partBlock->pb_Environment, &pp[ 4 ], sizeof( partBlock->pb_Environment ) );
 
 					bug( "%s Found partition list at block 0x%0.8lx\n", __FUNCTION__, rdbBlock->rdb_PartitionList );
 					bug( "%s Partition name %s\n", __FUNCTION__, partName );
@@ -944,10 +1347,28 @@ static void SAGASD_BootNode(
 					bug( "%s High Cylinder 0x%0.8lx\n", __FUNCTION__, pp[DE_LOWCYL + 4] );
 					bug( "%s DOS Type 0x%0.8lx\n", __FUNCTION__, pp[DE_DOSTYPE + 4] );
 					bug( "%s Max Transfer 0x%0.8lx\n", __FUNCTION__, pp[DE_MAXTRANSFER + 4] );
-					bug( "%s Boot priority %d\n", __FUNCTION__, pp[DE_BOOTPRI + 4] );
+					if( partBlock->pb_Flags == PBFF_BOOTABLE)
+						bug( "%s Boot priority %d\n", __FUNCTION__, pp[DE_BOOTPRI + 4] );
+					else
+						bug( "%s Not bootable.\n", __FUNCTION__ );
+					if( partBlock->pb_Flags == PBFF_NOMOUNT)
+						bug( "%s Not mountable.\n", __FUNCTION__ );
+					else
+						bug( "%s Mountable.\n", __FUNCTION__ );
+
+
+#if SUPPORT_FOREIGN_FILESYSTEMS
+					//Is this a native file system?
+					//This is only relevant to AOS because AROS Supports all filesystems we need
+					if( pp[ DE_DOSTYPE + 4 ] != DOSTYPE_DOS3 )
+					{
+						//Check the filesystem resource for this type
+						struct FileSysEntry *fileSystemResource = getFilesystemResourceEntry( SAGASDBase, unit, rdbBlock, pp[ DE_DOSTYPE + 4 ] );
+					}
+#endif
 
 				    //Create the dos node and add it to the boot node list
-				    devnode = MakeDosNode(pp);
+				    devnode = MakeDosNode( pp );
 				    if( devnode )
 				    {
 				    	//If this is bootable, add this as a boot node.
@@ -955,9 +1376,7 @@ static void SAGASD_BootNode(
 				    	{
 				    		if( partBlock->pb_Flags == PBFF_BOOTABLE )
 				    		{
-								//To make this bootable, we need a ConfigDev object
-								struct ConfigDev *configDev = AllocConfigDev();
-								if( AddBootNode( pp[DE_BOOTPRI + 4], ADNF_STARTPROC, devnode, configDev ) )
+								if( AddBootNode( pp[DE_BOOTPRI + 4], ADNF_STARTPROC, devnode, SAGASDBase->sd_ConfigDev ) )
 									bug( "%s failed to add partition %s to boot node list.\n", __FUNCTION__, partName );
 				    		}else
 				    		{
@@ -973,9 +1392,10 @@ static void SAGASD_BootNode(
 
 					//Check the next partition
 					ULONG nextPartitionBlock = partBlock->pb_Next;
-					if( nextPartitionBlock == 0 || nextPartitionBlock > sdu->sdu_SDCmd.info.blocks)
+					if( nextPartitionBlock == NULL_BLOCK || nextPartitionBlock > sdu->sdu_SDCmd.info.blocks )
 						break;	//No more partitions it seems
 					//Read the partition block
+					//memset( partBuffer, 0, sizeof( partBuffer ) );
 					sdcmd_read_block( &sdu->sdu_SDCmd, nextPartitionBlock, partBuffer );
 				}
     		}
@@ -983,42 +1403,54 @@ static void SAGASD_BootNode(
     		//We are done adding partitions.  Time to go back.
     		return;
     	}
-#if 0
-    	else
-    	{
-    		bug( "%s Didn't find RDB block.  Found 0x%0.8lx at block %d\n", __FUNCTION__, rdbBlock->rdb_ID, block );
-    		printBufferHex( rdbBuffer, 512 );
-    	}
-#endif
     }
 
+#if AUTOMOUNT_FAT_PARTITIONS
     //If we are this far, then no RDB partition is found
     //Let's assume (for better or worse) it is to be used as a fat drive
-    //TODO:  This isn't implemented as described above.....
-    pp[0] = (IPTR)dosdevname;
-    pp[1] = (IPTR)"sagasd.device";
-    pp[2] = unit;
-    pp[3] = 0;
-    pp[DE_TABLESIZE + 4] = DE_BOOTBLOCKS;
-    pp[DE_SIZEBLOCK + 4] = sdu->sdu_SDCmd.info.block_size >> 2;
-    pp[DE_NUMHEADS + 4] = SAGASD_HEADS;
-    pp[DE_SECSPERBLOCK + 4] = 1;
-    pp[DE_BLKSPERTRACK + 4] = SAGASD_SECTORS;
-    pp[DE_RESERVEDBLKS + 4] = 2;
-    pp[DE_LOWCYL + 4] = 0;
-    pp[DE_HIGHCYL + 4] = sdu->sdu_SDCmd.info.blocks / (SAGASD_HEADS * SAGASD_SECTORS);
-    pp[DE_NUMBUFFERS + 4] = 1;
-    pp[DE_BUFMEMTYPE + 4] = MEMF_PUBLIC;
-    pp[DE_MAXTRANSFER + 4] = 0x00200000;
-    pp[DE_MASK + 4] = 0x7FFFFFFE;
-    pp[DE_BOOTPRI + 4] = 5 - (unit * 10);
-    pp[DE_DOSTYPE + 4] = 0x444f5305;
-    pp[DE_CONTROL + 4] = 0;
-    pp[DE_BOOTBLOCKS + 4] = 2;
-    devnode = MakeDosNode(pp);
+    //TODO:  WIP
+    if( sdu->sdu_SDCmd.info.blocks > 0 )
+    {
+		pp[0] = (IPTR)dosdevname;
+		pp[1] = (IPTR)"sagasd.device";
+		pp[2] = unit;
+		pp[3] = 0;
+		pp[DE_TABLESIZE + 4] = DE_BOOTBLOCKS;
+		pp[DE_SIZEBLOCK + 4] = sdu->sdu_SDCmd.info.block_size >> 2;
+		pp[DE_NUMHEADS + 4] = SAGASD_HEADS;
+		pp[DE_SECSPERBLOCK + 4] = 1;
+		pp[DE_BLKSPERTRACK + 4] = SAGASD_SECTORS;
+		pp[DE_RESERVEDBLKS + 4] = 2;
+		pp[DE_LOWCYL + 4] = 0;
+		pp[DE_HIGHCYL + 4] = sdu->sdu_SDCmd.info.blocks / (SAGASD_HEADS * SAGASD_SECTORS);
+		pp[DE_NUMBUFFERS + 4] = 100;
+		pp[DE_BUFMEMTYPE + 4] = MEMF_PUBLIC;
+		pp[DE_MAXTRANSFER + 4] = 0x00200000;
+		pp[DE_MASK + 4] = 0x7FFFFFFE;
+		pp[DE_BOOTPRI + 4] = -1;
+		if( SAGASDBase->sd_IsAROS)
+			pp[DE_DOSTYPE + 4] = DOSTYPE_FAT95;		//AROS overwrites this anyhow.
+		else
+			pp[DE_DOSTYPE + 4] = DOSTYPE_FAT95;		//Amiga OS needs this defined
+		pp[DE_CONTROL + 4] = 0;
+		pp[DE_BOOTBLOCKS + 4] = 2;
+		devnode = MakeDosNode(pp);
 
-    if (devnode)
-    	AddBootNode(pp[DE_BOOTPRI + 4], ADNF_STARTPROC, devnode, NULL);
+		if (devnode)
+		{
+			debug( "%s() Adding device %s as BootNode", __FUNCTION__, dosdevname );
+			//char *handler = "fat-handler";
+            //ULONG len = strlen(handler);
+            //devnode->dn_Handler = MKBADDR(AllocMem(AROS_BSTR_MEMSIZE4LEN(len), MEMF_PUBLIC | MEMF_CLEAR) );
+            //if (devnode->dn_Handler != BNULL)
+            {
+                //CopyMem( handler, AROS_BSTR_ADDR(devnode->dn_Handler), len);
+                //AROS_BSTR_setstrlen(devnode->dn_Handler, len);
+                AddBootNode(pp[DE_BOOTPRI + 4], ADNF_STARTPROC, devnode, NULL);
+            }
+		}
+    }
+#endif
 }
 
 #define PUSH(task, type, value) do {\
@@ -1046,6 +1478,7 @@ static void SAGASD_InitUnit(struct SAGASDBase * SAGASDBase, int id)
     sdu->sdu_SDCmd.func.log = SAGASD_log;
     sdu->sdu_SDCmd.retry.read = SAGASD_RETRY;
     sdu->sdu_SDCmd.retry.write = SAGASD_RETRY;
+    sdu->sdu_SAGASDBase = SAGASDBase;
 
     /* If the unit is present, create an IO task for it
      */
@@ -1108,12 +1541,21 @@ static int GM_UNIQUENAME(init)(struct SAGASDBase * SAGASDBase)
     for (i = 0; i < SAGASD_UNITS; i++)
 	SAGASD_InitUnit(SAGASDBase, i);
 
+	//To make paritions bootable, we need a ConfigDev object
+    debug( "%s Creating configDev object.\n", __FUNCTION__ );
+    SAGASDBase->sd_ConfigDev = AllocConfigDev();
+
     /* Only add bootnode if recalibration succeeded */
     for (i = 0; i < SAGASD_UNITS; i++)
     {
-    	if (SAGASDBase->sd_Unit[i].sdu_Valid)
+    	if (SAGASDBase->sd_Unit[i].sdu_Valid )
     		SAGASD_BootNode(SAGASDBase, ExpansionBase, i);
     }
+
+    // Are we in AROS or AmigaOS?
+    struct Library *IsAROS = OpenLibrary("aros.library",0);
+    SAGASDBase->sd_IsAROS = (IsAROS ? TRUE : FALSE);
+    if (SAGASDBase->sd_IsAROS) CloseLibrary(IsAROS);
 
     CloseLibrary((struct Library *)ExpansionBase);
 

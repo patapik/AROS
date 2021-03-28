@@ -15,7 +15,7 @@ include $(SRCDIR)/config/aros.cfg
 
 #MM- kernel-fs-xtra:		\
 #MM	kernel-fs-sfs		\
-#MM	kernel-fs-fat
+#MM	kernel-fs-fat       
 
 #MM kernel-package-fs:		\
 #MM	kernel-fs-xtra	\

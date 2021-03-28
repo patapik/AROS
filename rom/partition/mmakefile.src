@@ -45,7 +45,7 @@ FUNCS := \
 
 USER_CPPFLAGS := \
                -DUSE_EXEC_DEBUG \
-	       -DDEBUG=0
+	       -DDEBUG=9
 USER_LDFLAGS  := -L$(GENDIR)/lib -static
 
 %build_module mmake=kernel-partition \

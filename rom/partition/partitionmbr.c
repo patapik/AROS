@@ -1,5 +1,5 @@
 /*
-    Copyright © 1995-2020, The AROS Development Team. All rights reserved.
+    Copyright ï¿½ 1995-2020, The AROS Development Team. All rights reserved.
     $Id$
 */
 
@@ -79,6 +79,8 @@ struct rootblock
 
 LONG MBRCheckPartitionTable(struct Library *PartitionBase, struct PartitionHandle *root, void *buffer)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     struct rootblock *blk = buffer;
     LONG res = 0;
 
@@ -123,6 +125,8 @@ LONG MBRCheckPartitionTable(struct Library *PartitionBase, struct PartitionHandl
 
 static LONG PartitionMBRCheckPartitionTable(struct Library *PartitionBase, struct PartitionHandle *root)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     LONG res;
     void *blk;
 
@@ -142,6 +146,8 @@ static LONG PartitionMBRCheckPartitionTable(struct Library *PartitionBase, struc
 
 static struct PartitionHandle *PartitionMBRNewHandle(struct Library *PartitionBase, struct PartitionHandle *root, UBYTE position, struct PCPartitionTable *entry)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     struct PartitionHandle *ph;
 
     if (entry->first_sector != 0)
@@ -176,6 +182,8 @@ static struct PartitionHandle *PartitionMBRNewHandle(struct Library *PartitionBa
 
 static LONG PartitionMBROpenPartitionTable(struct Library *PartitionBase, struct PartitionHandle *root)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     struct PartitionHandle *ph;
     struct MBR *mbr;
     UBYTE i;
@@ -205,6 +213,8 @@ static void PartitionMBRFreeHandle
         struct PartitionHandle *ph
     )
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     ClosePartitionTable(ph);
     FreeMem(ph->data, sizeof(struct MBRData));
     FreeMem(ph, sizeof(struct PartitionHandle));
@@ -216,7 +226,9 @@ static void PartitionMBRClosePartitionTable
         struct PartitionHandle *root
     )
 {
-struct PartitionHandle *ph;
+	bug( "%s started.\n", __FUNCTION__ );
+
+	struct PartitionHandle *ph;
 
     while ((ph = (struct PartitionHandle *)RemTail(&root->table->list)))
         PartitionMBRFreeHandle(PartitionBase, ph);
@@ -229,6 +241,8 @@ static LONG PartitionMBRWritePartitionTable
         struct PartitionHandle *root
     )
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     /* FIXME: readBlock(0) and synchronize data */
 
     /* root->data = mbr is up to date */
@@ -243,7 +257,9 @@ static LONG PartitionMBRCreatePartitionTable
         struct PartitionHandle *ph
     )
 {
-struct MBR *mbr;
+
+	struct MBR *mbr;
+	bug( "%s started.\n", __FUNCTION__ );
 
     mbr = AllocMem(ph->de.de_SizeBlock<<2, MEMF_PUBLIC);
     if (mbr)
@@ -272,8 +288,10 @@ void PartitionMBRSetGeometry
         ULONG relative_sector
     )
 {
-ULONG track;
-ULONG cyl;
+	ULONG track;
+	ULONG cyl;
+
+	bug( "%s started.\n", __FUNCTION__ );
 
     /* Store LBA start block and block count */
 
@@ -327,7 +345,8 @@ static void PartitionMBRSetDosEnvec
         struct DosEnvec *de
     )
 {
-ULONG sector, count;
+	ULONG sector, count;
+	bug( "%s started.\n", __FUNCTION__ );
 
     sector = de->de_LowCyl * de->de_Surfaces * de->de_BlocksPerTrack;
     count = (de->de_HighCyl - de->de_LowCyl + 1) *
@@ -339,6 +358,7 @@ ULONG sector, count;
 static struct PartitionHandle *PartitionMBRAddPartition(struct Library *PartitionBase, struct PartitionHandle *root, const struct TagItem *taglist)
 {
     struct TagItem *tag;
+    bug( "%s started.\n", __FUNCTION__ );
 
     tag = FindTagItem(PT_DOSENVEC, taglist);
 
@@ -395,6 +415,8 @@ static struct PartitionHandle *PartitionMBRAddPartition(struct Library *Partitio
 
 static void PartitionMBRDeletePartition(struct Library *PartitionBase, struct PartitionHandle *ph)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     struct MBRData *data = (struct MBRData *)ph->data;
 
     SetMem(data->entry, 0, sizeof(struct PCPartitionTable));
@@ -406,6 +428,8 @@ static void PartitionMBRDeletePartition(struct Library *PartitionBase, struct Pa
 static LONG PartitionMBRGetPartitionTableAttr(struct Library *PartitionBase,
     struct PartitionHandle *root, const struct TagItem *tag)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     switch (tag->ti_Tag)
     {
     case PTT_RESERVED:
@@ -424,6 +448,8 @@ static LONG PartitionMBRGetPartitionAttr(struct Library *PartitionBase,
     struct PartitionHandle *ph, const struct TagItem *tag)
 {
     struct MBRData *data = (struct MBRData *)ph->data;
+
+    bug( "%s started.\n", __FUNCTION__ );
 
     switch (tag->ti_Tag)
     {
@@ -447,6 +473,10 @@ static LONG PartitionMBRGetPartitionAttr(struct Library *PartitionBase,
     case PT_ENDBLOCK:
 	*((UQUAD *)tag->ti_Data) = AROS_LE2LONG(data->entry->first_sector) + AROS_LE2LONG(data->entry->count_sector) - 1;
 	return TRUE;
+
+    case PT_AUTOMOUNT:
+            *((LONG *)tag->ti_Data) = TRUE;
+            return TRUE;
     }
 
     /* Everything else gets default values */
@@ -455,6 +485,8 @@ static LONG PartitionMBRGetPartitionAttr(struct Library *PartitionBase,
 
 static LONG PartitionMBRSetPartitionAttrs(struct Library *PartitionBase, struct PartitionHandle *ph, const struct TagItem *taglist)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     struct MBRData *data = (struct MBRData *)ph->data;
     struct TagItem *tag;
 
@@ -532,6 +564,8 @@ static const struct PartitionAttribute PartitionMBRPartitionAttrs[]=
 ULONG PartitionMBRDestroyPartitionTable(struct Library *PartitionBase,
     struct PartitionHandle *root)
 {
+	bug( "%s started.\n", __FUNCTION__ );
+
     struct MBR *mbr = root->table->data;
 
     SetMem(mbr->pcpt, 0, sizeof(mbr->pcpt));

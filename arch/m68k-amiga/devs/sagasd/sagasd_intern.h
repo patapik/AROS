@@ -22,13 +22,15 @@
 
 struct SAGASDBase {
     struct Device       sd_Device;
+    struct ConfigDev	*sd_ConfigDev;
     struct Library *    sd_ExecBase;
     IPTR                sd_SegList;
+    BOOL				sd_IsAROS;
     struct SAGASDUnit {
         struct Unit sdu_Unit;
         struct Task sdu_Task;
         TEXT        sdu_Name[6];                /* "SDIOx" */
-        ULONG       sdu_Stack[1024];          /* 4K stack */
+        ULONG       sdu_Stack[SDU_STACK_SIZE];          /* 4K stack */
         BOOL        sdu_Enabled;
 
         struct sdcmd sdu_SDCmd;
@@ -39,8 +41,10 @@ struct SAGASDBase {
         BOOL sdu_ReadOnly;              /* Is the device read-only? */
         BOOL sdu_Motor;                 /* TD_MOTOR state */
         ULONG sdu_ChangeNum;
+        struct DosList *sdu_dosList;
 
         struct Library *sdu_ExecBase;
+        struct SAGASDBase *sdu_SAGASDBase;
     } sd_Unit[SAGASD_UNITS];
 };
 

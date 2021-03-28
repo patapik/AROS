@@ -1,6 +1,7 @@
 #!/bin/bash
 CPU_COUNT=$(grep processor /proc/cpuinfo | wc -l)
-THREADS=${CPU_COUNT}
+#THREADS=${CPU_COUNT}
+THREADS=8
 
 #Some how, running more than 8 tasks doesn't succeed every time
 if [ ${THREADS} -gt  8 ]
@@ -30,7 +31,7 @@ git clean -df
 rm -rf bin/amiga-m68k
 ./configure --target=amiga-m68k --with-optimization="-Os" --enable-ccache --with-aros-prefs=classic --with-resolution=640x256x4 --with-cpu=68020 --disable-mmu $@
 make -j${THREADS}
-make -j${THREADS} distfiles
+make -j4 distfiles
 cat bin/amiga-m68k/gen/boot/aros-amiga-m68k-ext.bin bin/amiga-m68k/gen/boot/aros-amiga-m68k-rom.bin > aros.rom
 ls -lah aros.rom
 
