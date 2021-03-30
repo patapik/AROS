@@ -385,43 +385,38 @@ LONG OpDeleteFile(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
     struct DirHandle dh;
     struct DirEntry de;
 
-    bug( "%s() started.\n", __FUNCTION__ );
-
-    //D(
+    D(
         bug("[fat] deleting file '");
         RawPutChars(name, namelen);
         bug("' in directory at cluster % ld\n",
             dirlock != NULL ? dirlock->ioh.first_cluster : 0);
-    //)
+    )
 
     dh.ioh.sb = NULL;
 
     /* Obtain a lock on the file. We need an exclusive lock as we don't want
      * to delete the file if it's in use */
-    bug( "%s() Locking file by name.\n", __FUNCTION__ );
     if ((err = LockFileByName(dirlock, name, namelen, EXCLUSIVE_LOCK, &lock,
         glob)) != 0)
     {
-        bug("[fat] couldn't obtain exclusive lock on named file\n");
+        D(bug("[fat] couldn't obtain exclusive lock on named file\n"));
         return err;
     }
-    bug( "%s() File locked.\n", __FUNCTION__ );
 
     if (lock->gl->attr & ATTR_READ_ONLY)
     {
-        bug("[fat] file is write protected, doing nothing\n");
-        bug( "%s() Freeing Lock.\n", __FUNCTION__ );
+        D(bug("[fat] file is write protected, doing nothing\n"));
         FreeLock(lock, glob);
-        bug( "%s() Lock freed.\n", __FUNCTION__ );
         return ERROR_DELETE_PROTECTED;
     }
 
     /* If it's a directory, we have to make sure it's empty */
     if (lock->gl->attr & ATTR_DIRECTORY)
     {
-        bug("[fat] file is a directory, making sure it's empty\n");
+        D(bug("[fat] file is a directory, making sure it's empty\n"));
 
-        if ((err = InitDirHandle(lock->ioh.sb, lock->ioh.first_cluster, &dh, FALSE, glob)) != 0)
+        if ((err = InitDirHandle(lock->ioh.sb, lock->ioh.first_cluster, &dh,
+            FALSE, glob)) != 0)
         {
             FreeLock(lock, glob);
             return err;
@@ -443,7 +438,7 @@ LONG OpDeleteFile(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
                 break;
 
             /* Otherwise the directory is still in use */
-            bug("[fat] directory still has files in it, won't delete it\n");
+            D(bug("[fat] directory still has files in it, won't delete it\n"));
 
             ReleaseDirHandle(&dh, glob);
             FreeLock(lock, glob);
@@ -454,12 +449,10 @@ LONG OpDeleteFile(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
     }
 
     /* Open the containing directory */
-    bug( "%s() Opening the containing directory.\n", __FUNCTION__ );
-    if ((err =InitDirHandle(lock->ioh.sb, lock->gl->dir_cluster, &dh,TRUE, glob)) != 0)
+    if ((err =InitDirHandle(lock->ioh.sb, lock->gl->dir_cluster, &dh,
+        TRUE, glob)) != 0)
     {
-    	bug( "%s() Failed to open the containing directroy  Freeing lock.\n", __FUNCTION__ );
         FreeLock(lock, glob);
-        bug( "%s() Lock freed.\n", __FUNCTION__ );
         return err;
     }
 
@@ -467,56 +460,39 @@ LONG OpDeleteFile(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
      * write protected */
     if (dh.ioh.first_cluster != dh.ioh.sb->rootdir_cluster)
     {
-    	bug( "%s() Get the dir entry.\n", __FUNCTION__ );
         GetDirEntry(&dh, 0, &de, glob);
-        bug( "%s() Got the dir entry.\n", __FUNCTION__ );
         if (de.e.entry.attr & ATTR_READ_ONLY)
         {
-            bug("[fat] containing dir is write protected, doing nothing\n");
-            bug( "%s() Release the DirHandle.\n", __FUNCTION__ );
+            D(bug("[fat] containing dir is write protected, doing nothing\n"));
             ReleaseDirHandle(&dh, glob);
-            bug( "%s() DirHandle released.\n", __FUNCTION__ );
-            bug( "%s() Freeing Lock.\n", __FUNCTION__ );
             FreeLock(lock, glob);
-            bug( "%s() Lock freed.\n", __FUNCTION__ );
             return ERROR_WRITE_PROTECTED;
         }
     }
 
     /* Get the entry for the file */
-    bug( "%s() Get the file dir entry.\n", __FUNCTION__ );
     GetDirEntry(&dh, lock->gl->dir_entry, &de, glob);
-    bug( "%s() Got the file's dir entry.\n", __FUNCTION__ );
 
     /* Kill it */
-    bug( "%s() Delete the file's dir entry.\n", __FUNCTION__ );
     DeleteDirEntry(&de, glob);
-    bug( "%s() File's dir entry deleted.\n", __FUNCTION__ );
 
     /* It's all good */
-    bug( "%s() Release the dir handle.\n", __FUNCTION__ );
     ReleaseDirHandle(&dh, glob);
-    bug( "%s() Dir Handle released.\n", __FUNCTION__ );
 
     /* Now free the clusters the file was using */
-    bug( "%s() Freeing cluster chain.\n", __FUNCTION__ );
     FREE_CLUSTER_CHAIN(lock->ioh.sb, lock->ioh.first_cluster);
-    bug( "%s() Cluster chain freed.\n", __FUNCTION__ );
 
     /* Notify */
-    bug( "%s() Notify by lock.\n", __FUNCTION__ );
     SendNotifyByLock(lock->ioh.sb, lock->gl);
 
     /* This lock is now completely meaningless */
-    bug( "%s() Freeing Lock.\n", __FUNCTION__ );
     FreeLock(lock, glob);
-    bug( "%s() Lock freed.\n", __FUNCTION__ );
 
-    //D(
+    D(
         bug("[fat] deleted '");
         RawPutChars(name, namelen);
         bug("'\n");
-    //)
+    )
 
     return 0;
 }
@@ -824,20 +800,22 @@ LONG OpWrite(struct ExtFileLock *lock, UBYTE *data, ULONG want,
     struct DirHandle dh;
     struct DirEntry de;
 
-    bug( "%s() started.\n", __FUNCTION__ );
+    D(bug("[fat] request to write %ld bytes to file pos %ld\n", want,
+        lock->pos));
     bug("[fat] request to write %ld bytes to file pos %ld\n", want, lock->pos);
+    bug("[fat] (begin) File Size: %d\n", lock->gl->size );
 
     /* Need an exclusive lock */
     if (lock->gl->access != EXCLUSIVE_LOCK)
     {
-        bug("[fat] can't modify global attributes via a shared lock\n");
+        D(bug("[fat] can't modify global attributes via a shared lock\n"));
         return ERROR_OBJECT_IN_USE;
     }
 
     /* Don't modify the file if it's protected */
     if (lock->gl->attr & ATTR_READ_ONLY)
     {
-        bug("[fat] file is write protected\n");
+        D(bug("[fat] file is write protected\n"));
         return ERROR_WRITE_PROTECTED;
     }
 
@@ -855,12 +833,13 @@ LONG OpWrite(struct ExtFileLock *lock, UBYTE *data, ULONG want,
     if ((err = WriteFileChunk(&(lock->ioh), lock->pos, want, data,
         written)) == 0)
     {
+    	bug("[fat] (After Write) File Size: %d\n", lock->gl->size );
         /* If nothing was written but success was returned (can that even
          * happen?) then we don't want to mess with the dir entry */
         if (*written == 0)
         {
-            bug("[fat] nothing successfully written (!),"
-                " nothing else to do\n");
+            D(bug("[fat] nothing successfully written (!),"
+                " nothing else to do\n"));
             return 0;
         }
 
@@ -883,14 +862,15 @@ LONG OpWrite(struct ExtFileLock *lock, UBYTE *data, ULONG want,
         else if (!(lock->gl->attr & ATTR_ARCHIVE))
             update_entry = TRUE;
 
-        bug("[fat] wrote %ld bytes, new file pos is %ld, size is %ld\n",
-            *written, lock->pos, lock->gl->size);
+        D(bug("[fat] wrote %ld bytes, new file pos is %ld, size is %ld\n",
+            *written, lock->pos, lock->gl->size));
 
         if (update_entry)
         {
-            bug("[fat] updating dir entry, first cluster is %ld,"
+            D(bug("[fat] updating dir entry, first cluster is %ld,"
                 " size is %ld\n",
-                lock->ioh.first_cluster, lock->gl->size);
+                lock->ioh.first_cluster, lock->gl->size));
+            bug("[fat] updating dir entry, first cluster is %ld, size is %ld\n",lock->ioh.first_cluster, lock->gl->size);
 
             lock->gl->first_cluster = lock->ioh.first_cluster;
 
@@ -898,18 +878,38 @@ LONG OpWrite(struct ExtFileLock *lock, UBYTE *data, ULONG want,
                 glob);
             GetDirEntry(&dh, lock->gl->dir_entry, &de, glob);
 
-            de.e.entry.file_size = AROS_LE2LONG( lock->gl->size );
-            de.e.entry.first_cluster_lo = lock->gl->first_cluster & 0xffff;
-            de.e.entry.first_cluster_hi = lock->gl->first_cluster >> 16;
+            de.e.entry.file_size = AROS_LONG2LE( lock->gl->size );
+            //de.e.entry.first_cluster_lo = lock->gl->first_cluster & 0xffff;
+            //de.e.entry.first_cluster_hi = lock->gl->first_cluster >> 16;
+            bug( "[fat] first_cluster: 0x%08X\n", lock->gl->first_cluster );
+            de.e.entry.first_cluster_lo = AROS_LONG2LE( lock->gl->first_cluster ) >> 16;
+            de.e.entry.first_cluster_hi = AROS_LONG2LE( lock->gl->first_cluster ) & 0xffff;
+            bug( "[fat] first_cluster_lo: 0x%04X\n", de.e.entry.first_cluster_lo );
+            bug( "[fat] first_cluster_hi: 0x%04X\n", de.e.entry.first_cluster_hi );
 
-            bug( "%s() Filesize: %d\n", __FUNCTION__, de.e.entry.file_size );
-            bug( "%s() First Cluster_lo: %d\n", __FUNCTION__, de.e.entry.first_cluster_lo );
-            bug( "%s() First Closter_hi: %d\n", __FUNCTION__, de.e.entry.first_cluster_hi );
+            bug("[fat] (Before UpdateDirEntry) File Size: %d\n", lock->gl->size );
+
+            LONG testLong = 0x11223344;
+            WORD testLo = AROS_LONG2LE( testLong ) >> 16;
+            WORD testHi = AROS_LONG2LE( testLong ) & 0xffff;
+            bug( "[fat] testLong: 0x%08X\n", testLong );
+            bug( "[fat] testLo: 0x%04X\n", testLo );
+            bug( "[fat] testHi: 0x%04X\n", testHi );
+
+            testLo = AROS_LONG2LE( testLong & 0xffff );
+            testHi = AROS_LONG2LE( testLong >> 16 );
+            bug( "[fat] testLong: 0x%08X\n", testLong );
+            bug( "[fat] testLo: 0x%04X\n", testLo );
+            bug( "[fat] testHi: 0x%04X\n", testHi );
 
             de.e.entry.attr |= ATTR_ARCHIVE;
             UpdateDirEntry(&de, glob);
 
+            bug("[fat] (After UpdateDirEntry) File Size: %d\n", lock->gl->size );
+
             ReleaseDirHandle(&dh, glob);
+
+            bug("[fat] (After ReleaseDirHandle) File Size: %d\n", lock->gl->size );
         }
     }
 
@@ -925,8 +925,6 @@ LONG OpSetFileSize(struct ExtFileLock *lock, LONG offset, LONG whence,
     struct DirEntry de;
     ULONG want, count;
     ULONG cl, next, first, last;
-
-    bug( "%s() started.\n", __FUNCTION__ );
 
     /* Need an exclusive lock to do what is effectively a write */
     if (lock->gl->access != EXCLUSIVE_LOCK)
@@ -953,7 +951,6 @@ LONG OpSetFileSize(struct ExtFileLock *lock, LONG offset, LONG whence,
     else
         return ERROR_SEEK_ERROR;
 
-    bug( "%s() File Size: %ld\n", __FUNCTION__, lock->gl->size );
     if (lock->gl->size == size)
     {
         D(bug("[fat] new size matches old size, nothing to do\n"));
@@ -980,7 +977,6 @@ LONG OpSetFileSize(struct ExtFileLock *lock, LONG offset, LONG whence,
     want = (size >> glob->sb->clustersize_bits)
         + ((size & (glob->sb->clustersize - 1)) ? 1 : 0);
 
-    bug( "%s() We want %ld clusters for this file.\n", __FUNCTION__, want );
     D(bug("[fat] want %ld clusters for file\n", want));
 
     /* We're getting three things here - the first cluster of the existing
@@ -1080,12 +1076,12 @@ LONG OpSetFileSize(struct ExtFileLock *lock, LONG offset, LONG whence,
     }
 
     /* Clusters are fixed, now update the directory entry */
-    de.e.entry.first_cluster_lo = first & 0xffff;
-    de.e.entry.first_cluster_hi = first >> 16;
-    de.e.entry.file_size = size;
+    de.e.entry.first_cluster_lo = AROS_LONG2LE( first ) >> 16;
+    de.e.entry.first_cluster_hi = AROS_LONG2LE( first ) & 0xffff;
+    de.e.entry.file_size = AROS_LONG2LE( size );
     de.e.entry.attr |= ATTR_ARCHIVE;
     UpdateDirEntry(&de, glob);
-    bug("[fat] set file size to %ld, first cluster is %ld\n", size, first);
+
     D(bug("[fat] set file size to %ld, first cluster is %ld\n", size,
         first));
 
@@ -1199,13 +1195,13 @@ LONG OpSetDate(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
     }
 
     /* Set and update the date */
-    wdate = de.e.entry.write_date;
-    wtime = de.e.entry.write_time;
+    wdate = AROS_LE2WORD( de.e.entry.write_date );
+    wtime = AROS_LE2WORD( de.e.entry.write_time );
     ConvertDOSDate(ds, &wdate, &wtime,
         glob);
-    de.e.entry.write_date = wdate;
-    de.e.entry.write_time = wtime;
-    de.e.entry.last_access_date = wdate;
+    de.e.entry.write_date = AROS_WORD2LE( wdate );
+    de.e.entry.write_time = AROS_WORD2LE( wtime );
+    de.e.entry.last_access_date = AROS_WORD2LE( wdate );
     UpdateDirEntry(&de, glob);
 
     SendNotifyByDirEntry(glob->sb, &de);

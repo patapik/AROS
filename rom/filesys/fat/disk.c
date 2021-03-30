@@ -206,9 +206,11 @@ LONG AccessDisk(BOOL do_write, ULONG num, ULONG nblocks, ULONG block_size,
     {
         glob->diskioreq->iotd_Req.io_Offset = off & 0xFFFFFFFF;
         glob->diskioreq->iotd_Req.io_Actual = off >> 32;
+
         glob->diskioreq->iotd_Req.io_Length = nblocks * block_size;
         glob->diskioreq->iotd_Req.io_Data = data;
-        glob->diskioreq->iotd_Req.io_Command = do_write ? glob->writecmd : glob->readcmd;
+        glob->diskioreq->iotd_Req.io_Command =
+            do_write ? glob->writecmd : glob->readcmd;
 
         err = DoIO((struct IORequest *)glob->diskioreq);
 

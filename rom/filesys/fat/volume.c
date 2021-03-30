@@ -71,8 +71,6 @@ static void FreeFATSuper(struct FSSuper *s);
 
 LONG ReadFATSuper(struct FSSuper *sb)
 {
-	bug( "[FAT] %s() started.\n", __FUNCTION__ );
-
     struct Globals *glob = sb->glob;
     struct DosEnvec *de = BADDR(glob->fssm->fssm_Environ);
     LONG err = 0, td_err;
@@ -465,8 +463,6 @@ LONG ReadFATSuper(struct FSSuper *sb)
 static LONG GetVolumeIdentity(struct FSSuper *sb,
     struct VolumeIdentity *volume)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct Globals *glob = sb->glob;
     struct DirHandle dh;
     struct DirEntry de;
@@ -723,8 +719,6 @@ LONG FormatFATVolume(const UBYTE *name, UWORD len, struct Globals *glob)
 
 LONG SetVolumeName(struct FSSuper *sb, UBYTE *name, UWORD len)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct Globals *glob = sb->glob;
     struct DirHandle dh;
     struct DirEntry de;
@@ -832,8 +826,6 @@ LONG SetVolumeName(struct FSSuper *sb, UBYTE *name, UWORD len)
 
 static void FreeFATSuper(struct FSSuper *sb)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct Globals *glob = sb->glob;
     D(bug("\tRemoving Super Block from memory\n"));
     Cache_DestroyCache(sb->cache);
@@ -845,8 +837,6 @@ static void FreeFATSuper(struct FSSuper *sb)
 
 void FillDiskInfo(struct InfoData *id, struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct DosEnvec *de = BADDR(glob->fssm->fssm_Environ);
 
     id->id_NumSoftErrors = 0;
@@ -891,8 +881,6 @@ void FillDiskInfo(struct InfoData *id, struct Globals *glob)
 static void SendVolumePacket(struct DosList *vol, ULONG action,
     struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct DosPacket *dospacket;
 
     dospacket = AllocDosObject(DOS_STDPKT, TAG_DONE);
@@ -907,8 +895,6 @@ static void SendVolumePacket(struct DosList *vol, ULONG action,
 
 void DoDiskInsert(struct Globals *glob)
 {
-	bug( "[FAT] %s() started.\n", __FUNCTION__ );
-
     struct FSSuper *sb;
     ULONG err;
     struct DosList *dl;
@@ -1090,8 +1076,6 @@ void DoDiskInsert(struct Globals *glob)
 
 BOOL AttemptDestroyVolume(struct FSSuper *sb)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct Globals *glob = sb->glob;
     BOOL destroyed = FALSE;
 
@@ -1119,7 +1103,6 @@ BOOL AttemptDestroyVolume(struct FSSuper *sb)
 
 void DoDiskRemove(struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
 
     if (glob->sb)
     {

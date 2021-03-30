@@ -434,11 +434,8 @@ LONG AllocDirEntry(struct DirHandle *dh, ULONG gap, struct DirEntry *de,
     ULONG nfound;
     BOOL clusteradded = FALSE;
 
-    bug( "%s() started.\n", __FUNCTION__ );
-
     /* Find out how many entries we need */
     nwant = gap + 1;
-    bug( "%s() Needs %ld entries.\n", __FUNCTION__, nwant );
 
     D(bug("[fat] need to find room for %ld contiguous entries\n", nwant));
 
@@ -527,8 +524,6 @@ LONG CreateDirEntry(struct DirHandle *dh, STRPTR name, ULONG namelen,
     ULONG gap;
     LONG err;
 
-    bug( "%s() started.\n", __FUNCTION__ );
-
     D(
         bug("[fat] creating dir entry (name '");
         RawPutChars(name, namelen);
@@ -563,8 +558,6 @@ LONG CreateDirEntry(struct DirHandle *dh, STRPTR name, ULONG namelen,
 void FillDirEntry(struct DirEntry *de, UBYTE attr, ULONG cluster,
     struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct DateStamp ds;
     UWORD cdate, ctime;
 
@@ -598,21 +591,17 @@ LONG DeleteDirEntry(struct DirEntry *de, struct Globals *glob)
     ULONG order;
     LONG err;
 
-    bug( "%s() started.\n", __FUNCTION__ );
-
     InitDirHandle(glob->sb, de->cluster, &dh, FALSE, glob);
 
     /* Calculate the short name checksum before we trample on the name */
     CALC_SHORT_NAME_CHECKSUM(de->e.entry.name, checksum);
 
-    bug("[fat] short name checksum is 0x%02x\n", checksum);
     D(bug("[fat] short name checksum is 0x%02x\n", checksum));
 
     /* Mark the short entry free */
     de->e.entry.name[0] = 0xe5;
     UpdateDirEntry(de, glob);
 
-    bug("[fat] deleted short name entry\n");
     D(bug("[fat] deleted short name entry\n"));
 
     /* Now we loop over the previous entries, looking for matching long name
@@ -635,12 +624,9 @@ LONG DeleteDirEntry(struct DirEntry *de, struct Globals *glob)
         order++;
     }
 
-    bug("[fat] deleted %ld long name entries\n", order - 1);
     D(bug("[fat] deleted %ld long name entries\n", order - 1));
 
-    bug( "%s() Releasing dir handle.\n", __FUNCTION__ );
     ReleaseDirHandle(&dh, glob);
-    bug( "%s() Dir handle released.\n", __FUNCTION__ );
 
     return err;
 }
@@ -659,46 +645,43 @@ LONG FillFIB(struct ExtFileLock *fl, struct FileInfoBlock *fib,
 
     if (gl == &sb->info->root_lock)
     {
-    	bug("\t\ttype: root directory\n");
         D(bug("\t\ttype: root directory\n"));
         fib->fib_DirEntryType = ST_ROOT;
     }
     else if (gl->attr & ATTR_DIRECTORY)
     {
-    	bug("\t\ttype: directory\n");
         D(bug("\t\ttype: directory\n"));
         fib->fib_DirEntryType = ST_USERDIR;
     }
     else
     {
-    	bug("\t\ttype: file\n");
         D(bug("\t\ttype: file\n"));
         fib->fib_DirEntryType = ST_FILE;
     }
 
-    bug( "%s()\t\tsize: %ld\n", __FUNCTION__, AROS_LE2LONG( gl->size ) );
-    bug( "%s()\t\tAttr: 0X%lX\n", __FUNCTION__, gl->attr);
-    D(bug("\t\tsize: %ld\n",  gl->size ));		//ronybeck
+    D(bug("\t\tsize: %ld\n", gl->size));
 
-    fib->fib_Size = AROS_LE2LONG( gl->size );
-    fib->fib_NumBlocks = (( AROS_LE2LONG(gl->size) + (sb->clustersize - 1)) >> sb->clustersize_bits) << sb->cluster_sectors_bits;
+    fib->fib_Size = gl->size;
+    fib->fib_NumBlocks = ((gl->size + (sb->clustersize - 1))
+        >> sb->clustersize_bits) << sb->cluster_sectors_bits;
     fib->fib_EntryType = fib->fib_DirEntryType;
     fib->fib_DiskKey = 0xfffffffflu;    //fl->entry;
 
     if (fib->fib_DirEntryType == ST_ROOT)
-        CopyMem(&sb->volume.create_time, &fib->fib_Date, sizeof(struct DateStamp));
+        CopyMem(&sb->volume.create_time, &fib->fib_Date,
+            sizeof(struct DateStamp));
     else
     {
         InitDirHandle(sb, gl->dir_cluster, &dh, FALSE, glob);
         GetDirEntry(&dh, gl->dir_entry, &de, glob);
-        ConvertFATDate(de.e.entry.write_date, de.e.entry.write_time, &fib->fib_Date, glob);
+        ConvertFATDate(de.e.entry.write_date, de.e.entry.write_time,
+            &fib->fib_Date, glob);
         ReleaseDirHandle(&dh, glob);
     }
 
     len = gl->name[0] <= 106 ? gl->name[0] : 106;
     CopyMem(gl->name, fib->fib_FileName, len + 1);
     fib->fib_FileName[len + 1] = '\0';
-    bug("\t\tname (len %ld) %s\n", len, fib->fib_FileName + 1);
     D(bug("\t\tname (len %ld) %s\n", len, fib->fib_FileName + 1));
 
     fib->fib_Protection = 0;

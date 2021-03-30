@@ -28,8 +28,7 @@
 #include "fat_fs.h"
 #include "fat_protos.h"
 
-//#define DEBUG DEBUG_MISC
-#define DEBUG 1
+#define DEBUG DEBUG_MISC
 #include "debug.h"
 
 #undef SysBase
@@ -58,8 +57,6 @@ static struct Globals *fat_init(struct Process *proc, struct DosPacket *dp,
     struct ExecBase *SysBase)
 {
     struct Globals *glob;
-
-    bug( "%s() started.\n", __FUNCTION__ );
 
     glob = AllocVec(sizeof(struct Globals), MEMF_ANY | MEMF_CLEAR);
     if (glob)
@@ -115,8 +112,6 @@ static struct Globals *fat_init(struct Process *proc, struct DosPacket *dp,
 
 static void fat_exit(struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct ExecBase *SysBase = glob->gl_SysBase;
     CleanupDiskHandler(glob);
     CleanupTimer(glob);
@@ -137,7 +132,7 @@ LONG handler(struct ExecBase *SysBase)
     struct MsgPort *mp;
     struct DosPacket *dp;
 
-    D(bug("%[FAT]: started\n", __func__));
+    D(bug("%s: start\n", __func__));
 
     proc = (struct Process *)FindTask(NULL);
     mp = &proc->pr_MsgPort;
@@ -212,8 +207,6 @@ static AROS_INTH1(DiskChangeIntHandler, struct IntData *, MyIntData)
 {
     AROS_INTFUNC_INIT
 
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct ExecBase *SysBase = MyIntData->SysBase;
 
     Signal(MyIntData->task, MyIntData->signal);
@@ -224,16 +217,12 @@ static AROS_INTH1(DiskChangeIntHandler, struct IntData *, MyIntData)
 
 static LONG InitDiskHandler(struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
-
     struct ExecBase *SysBase = glob->gl_SysBase;
     struct FileSysStartupMsg *fssm = glob->fssm;
     LONG err;
     ULONG diskchgintbit, flags;
     IPTR unit;
     UBYTE *device;
-
-    bug( "%s started.\n", __FUNCTION__ );
 
     unit = fssm->fssm_Unit;
     flags = fssm->fssm_Flags;
@@ -326,7 +315,6 @@ static LONG InitDiskHandler(struct Globals *glob)
 
 static void CleanupDiskHandler(struct Globals *glob)
 {
-	bug( "%s() started.\n", __FUNCTION__ );
     struct ExecBase *SysBase = glob->gl_SysBase;
 
     D(bug("\tFreeing handler resources:\n"));
