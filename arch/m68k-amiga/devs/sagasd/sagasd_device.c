@@ -684,28 +684,12 @@ static void SAGASD_Detect(struct Library *SysBase, struct SAGASDUnit *sdu)
             sdu->sdu_Valid = (sderr == 0) ? TRUE : FALSE;
             debug("========= sdu_Valid: %s", sdu->sdu_Valid ? "TRUE" : "FALSE");
             debug("========= Blocks: %ld", sdu->sdu_SDCmd.info.blocks);
+            Permit();
             //Add the boot nodes
             struct Library *ExpansionBase = TaggedOpenLibrary(TAGGEDOPEN_EXPANSION);
             if( ExpansionBase && sdu->sdu_SDCmd.info.blocks && sdu->sdu_SAGASDBase )
             {
             	SAGASD_BootNode( sdu->sdu_SAGASDBase, ExpansionBase, 0 );
-
-            	/*
-            	sdu->sdu_dosList = MakeDosEntry( sdu->sdu_Name, DLT_DEVICE );
-            	if( sdu->sdu_dosList  )
-            	{
-            		debug("========= Attempting to add to doslist" );
-            		if (AttemptLockDosList(LDF_DEVICES|LDF_VOLUMES|LDF_WRITE))
-					{
-						AddDosEntry( sdu->sdu_dosList  );
-						UnLockDosList(LDF_DEVICES|LDF_VOLUMES|LDF_WRITE);
-					}
-            	}else
-            	{
-            		debug("========= Unable to add to doslist." );
-            	}
-            	*/
-                Permit();
             }
         } else {
             Forbid();
@@ -713,6 +697,8 @@ static void SAGASD_Detect(struct Library *SysBase, struct SAGASDUnit *sdu)
             sdu->sdu_Valid = FALSE;
             Permit();
             debug( "SD Card ejected!");
+            struct DosList *dl;
+			struct DosList *fdl;
         }
     }
 }

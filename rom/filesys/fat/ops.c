@@ -727,6 +727,9 @@ LONG OpCreateDir(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
     GetDirEntry(&sdh, 0, &sde, glob);
     CopyMem(&de.e.entry, &sde.e.entry, sizeof(struct FATDirEntry));
     CopyMem(".          ", &sde.e.entry.name, FAT_MAX_SHORT_NAME);
+    //sde.pos = AROS_LONG2LE( sde.pos );
+    //sde.index = AROS_LONG2LE( sde.index );
+    //sde.cluster = AROS_LONG2LE( sde.cluster );
     UpdateDirEntry(&sde, glob);
 
     /* Create the dot-dot entry. Again, a copy, with the cluster pointer set
@@ -737,8 +740,11 @@ LONG OpCreateDir(struct ExtFileLock *dirlock, UBYTE *name, ULONG namelen,
     cluster = dh.ioh.first_cluster;
     if (cluster == dh.ioh.sb->rootdir_cluster)
         cluster = 0;
-    sde.e.entry.first_cluster_lo = cluster & 0xffff;
-    sde.e.entry.first_cluster_hi = cluster >> 16;
+    sde.e.entry.first_cluster_lo = AROS_LONG2LE( cluster ) << 16;
+    sde.e.entry.first_cluster_hi = AROS_LONG2LE( cluster ) & 0xffff;
+    //sde.pos = AROS_LONG2LE( sde.pos );
+    //sde.index = AROS_LONG2LE( sde.index );
+    //sde.cluster = AROS_LONG2LE( sde.cluster );
     UpdateDirEntry(&sde, glob);
 
     /* Clear all remaining entries (the first of which marks the end of the
