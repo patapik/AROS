@@ -12,7 +12,7 @@ This project is licensed under the APL License - see the [LICENSE](LICENSE) file
 
 AROS contains parts built upon external components - see the [ACKNOWLEDGEMENTS](ACKNOWLEDGEMENTS) file for details
 
-How to install ApolloOS on Linux 
+How to compile ApolloOS on Linux 
 
 Ubuntu 20.04.2.0 LTS example
 (2.7GB iso) 2021.06.04
