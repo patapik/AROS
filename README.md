@@ -15,8 +15,11 @@ AROS contains parts built upon external components - see the [ACKNOWLEDGEMENTS](
 How to compile ApolloOS on Linux 
 
 Ubuntu 20.04.2.0 LTS example
+
 (2.7GB iso) 2021.06.04
+
 0. sudo apt-get update
+
 steps:
 1. sudo apt install build-essential
 2. sudo apt-get install autotools-dev
