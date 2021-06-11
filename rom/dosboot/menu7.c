@@ -1,5 +1,5 @@
 /*
-   (c) 2021 Apollo Team Devs
+   Copyright (c) 2021 Vampires and Co LtD 
  
    Desc: Main bootmenu code
    Lang: english
@@ -29,11 +29,13 @@
 #include <aros/bootloader.h>
 #include <aros/symbolsets.h>
 
-
+#include <libraries/reqtools.h>  //My
+#include <proto/reqtools.h>    //my
 
 #include <stdio.h>  //my 
 #include <string.h>  //my
 #include <stdlib.h> //my
+
 
 #include LC_LIBDEFS_FILE
 
@@ -43,15 +45,16 @@
 #define PAGE_MAIN 1
 #define PAGE_BOOT 2
 #define PAGE_DISPLAY 3
-#define PAGE_HELP 4
 #define EXIT_BOOT 5
 #define EXIT_BOOT_WNSS 6
 
+#define PROGNAME "rtfile"  //my
 
 #if (AROS_FLAVOUR & AROS_FLAVOUR_STANDALONE)
 
 #endif
 
+ 
 
 static LONG centerx(LIBBASETYPEPTR DOSBootBase, LONG width)
 {
@@ -63,21 +66,40 @@ static LONG rightto(LIBBASETYPEPTR DOSBootBase, LONG width, LONG right)
     return DOSBootBase->bm_Screen->Width - width - right;
 }
 
- 
+// REQ test
+static char s[300];
+
+static void action(void)
+{
+    struct rtFileRequester *req;
+    
+    struct TagItem tags[] =
+    {
+        { RTFI_Flags, FREQF_PATGAD },
+    	{ TAG_DONE }
+    };
+    
+    if ((req = rtAllocRequestA(RT_FILEREQ, tags)))
+    {
+        rtFileRequestA(req, s, "FILE Name", tags);
+	rtFreeRequest(req);
+    }
+}
+
+
 static struct Gadget *createGadgetsBoot(LIBBASETYPEPTR DOSBootBase)
 {
     LONG cx = centerx((struct DOSBootBase *)DOSBootBase, 280);
 
     /* Create Option Gadgets */
     DOSBootBase->bm_MainGadgets.bootopt = createButton(
-                                                        600, 240, 10, 10, 
-                                                        NULL, "?",
+                                                        345, 220, 100, 10, 
+                                                        NULL, "HELP...",
                                                         BUTTON_BOOT_OPTIONS, (struct DOSBootBase *)DOSBootBase);
-    DOSBootBase->bm_MainGadgets.help = createButton(
+    DOSBootBase->bm_MainGadgets.boot = createButton(
                                                         100, 63, 150, 10, 
-                                                        DOSBootBase->bm_MainGadgets.bootopt->gadget, "SD0:",
-                                                        BUTTON_HELP, (struct DOSBootBase *)DOSBootBase);
-
+                                                        DOSBootBase->bm_MainGadgets.bootopt->gadget, "Vampire Bootloader",
+                                                        BUTTON_BOOT, (struct DOSBootBase *)DOSBootBase);
     DOSBootBase->bm_MainGadgets.displayopt = createButton(
                                                         100, 75, 150, 10, 
                                                         DOSBootBase->bm_MainGadgets.bootopt->gadget, "ApolloOS",
@@ -118,12 +140,11 @@ static struct Gadget *createGadgetsBoot(LIBBASETYPEPTR DOSBootBase)
                                                         100, 183, 150, 10, 
                                                         DOSBootBase->bm_MainGadgets.bootopt->gadget, "AMIGA OS 3.1.4.1",
                                                         BUTTON_BOOT, (struct DOSBootBase *)DOSBootBase); 
-/*
+
     DOSBootBase->bm_MainGadgets.displayopt = createButton(
                                                         330, 63 , 150, 10, 
                                                         DOSBootBase->bm_MainGadgets.bootopt->gadget, "Boot from Floppy",
                                                         BUTTON_BOOT, (struct DOSBootBase *)DOSBootBase);
-                                                        */
 
     DOSBootBase->bm_MainGadgets.displayopt = createButton(
                                                         380, 75, 50, 10, 
@@ -158,13 +179,9 @@ static struct Gadget *createGadgetsBoot(LIBBASETYPEPTR DOSBootBase)
                                                         DOSBootBase->bm_MainGadgets.bootopt->gadget, "Turtle mode ON",
                                                         BUTTON_BOOT, (struct DOSBootBase *)DOSBootBase);                                                    
     DOSBootBase->bm_MainGadgets.bootnss = createButton(
-                                                       100, 210, 160, 10, 
+                                                       cx, 200, 180, 10, 
                                                        DOSBootBase->bm_MainGadgets.displayopt->gadget, "Clean Boot",
                                                        BUTTON_BOOT_WNSS, (struct DOSBootBase *)DOSBootBase);
-    DOSBootBase->bm_MainGadgets.boot = createButton(
-                                                        290  , 210, 160, 10, 
-                                                        DOSBootBase->bm_MainGadgets.bootopt->gadget, "Vampire Bootloader",
-                                                        BUTTON_BOOT, (struct DOSBootBase *)DOSBootBase);                                                   
 
 
     /*DOSBootBase->bm_MainGadgets.bootnss = createButton(
@@ -172,13 +189,12 @@ static struct Gadget *createGadgetsBoot(LIBBASETYPEPTR DOSBootBase)
                                                     DOSBootBase->bm_MainGadgets.boot->gadget, "HELP",
                                                     BUTTON_BOOT_WNSS, (struct DOSBootBase *)DOSBootBase);*/
 
+
     if (!DOSBootBase->bm_MainGadgets.bootopt ||
-        !DOSBootBase->bm_MainGadgets.boot    ||
-        !DOSBootBase->bm_MainGadgets.help    ||
+        !DOSBootBase->bm_MainGadgets.boot ||
         !DOSBootBase->bm_MainGadgets.bootnss)
         return NULL;
     return DOSBootBase->bm_MainGadgets.bootopt->gadget;
- 
 }
 
 static void freeGadgetsBoot(LIBBASETYPEPTR DOSBootBase)
@@ -186,8 +202,6 @@ static void freeGadgetsBoot(LIBBASETYPEPTR DOSBootBase)
     freeButtonGadget(DOSBootBase->bm_MainGadgets.boot, (struct DOSBootBase *)DOSBootBase);
     freeButtonGadget(DOSBootBase->bm_MainGadgets.bootnss, (struct DOSBootBase *)DOSBootBase);
     freeButtonGadget(DOSBootBase->bm_MainGadgets.bootopt, (struct DOSBootBase *)DOSBootBase);
-    freeButtonGadget(DOSBootBase->bm_MainGadgets.help, (struct DOSBootBase *)DOSBootBase);
-
 }
 
 static struct Gadget *createGadgets(LIBBASETYPEPTR DOSBootBase, WORD page) 
@@ -202,26 +216,14 @@ static void freeGadgets(LIBBASETYPEPTR DOSBootBase, WORD page)
         freeGadgetsBoot(DOSBootBase);
     }
 
-
-
-
 static void toggleMode(LIBBASETYPEPTR DOSBootBase)
 {
- 
-      if (OpenResource("ciaa.resource")) 
-   {
+  
+    if (OpenResource("ciaa.resource")) {
         volatile UWORD *beamcon0 = (UWORD*)0xdff1dc;
         GfxBase->DisplayFlags ^= PAL | NTSC;
         *beamcon0 = (GfxBase->DisplayFlags & PAL) ? 0x0020 : 0x0000;
     }
-  
-  
-}
-static void TurtleMode()
-{
- 
- 
-  
 }
 
 static UWORD msgLoop(LIBBASETYPEPTR DOSBootBase, struct Window *win, WORD page)
@@ -259,7 +261,7 @@ static UWORD msgLoop(LIBBASETYPEPTR DOSBootBase, struct Window *win, WORD page)
                         if (DOSBootBase->bm_BootNode != NULL)
                         {
                            
-                            exit = PAGE_MAIN;
+                        //    exit = PAGE_BOOT;
                             break;
                         }
                         
@@ -284,9 +286,6 @@ static UWORD msgLoop(LIBBASETYPEPTR DOSBootBase, struct Window *win, WORD page)
                         DOSBootBase->db_BootFlags |= BF_NO_STARTUP_SEQUENCE;
                         exit = EXIT_BOOT_WNSS;
                         break; 
-                    case BUTTON_HELP:
-                        exit = PAGE_HELP;
-                        break;   
                     }                               
                             
                 }
@@ -304,14 +303,6 @@ static UWORD msgLoop(LIBBASETYPEPTR DOSBootBase, struct Window *win, WORD page)
     return exit;
 }
 
-static void initPagehelp(LIBBASETYPEPTR DOSBootBase)
-{
-    WORD y = 70;
-    struct Window *win = DOSBootBase->bm_Window;
-    SetAPen(win->RPort, 1);
-
-}
-
 static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
 {
     struct Window *win = DOSBootBase->bm_Window;
@@ -321,16 +312,7 @@ static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
     char text[100], *textp;
 
     SetAPen(win->RPort, 1);
-    /*
-    volatile UBYTE *color0 = (APTR)0xDFF180;
-    volatile UBYTE *color1 = (APTR)0xDFF182;
-    *color0 = 0; 
-    *color1 = 77;
-    */
-
-    SetRGB4(&DOSBootBase->bm_Screen->ViewPort, 0, 80, 80, 80);  //4bit background colour
-    SetRGB4(&DOSBootBase->bm_Screen->ViewPort, 3, 146,146,146);  //file systems colour
-
+   
     ForeachNode(&DOSBootBase->bm_ExpansionBase->MountList, bn)
     {
         struct DeviceNode *dn = bn->bn_DeviceNode;
@@ -342,7 +324,7 @@ static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
         UBYTE i;
         ULONG size;
         BOOL devopen, ismedia;
-   
+
         if (y >= DOSBootBase->bottomY + 10) //???
             break;
         if (!fssm || !fssm->fssm_Device)
@@ -353,15 +335,15 @@ static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
                 de = NULL;
         }
 
-        NewRawDoFmt("%c%10s: %4d %s-%ld", RAWFMTFUNC_STRING, text,' ',
-           // (DOSBootBase->bm_BootNode == bn) ? '*' : IsBootableNode(bn) ? '+' : ' ',
+        NewRawDoFmt("%c%10s: %4d %s-%ld", RAWFMTFUNC_STRING, text,
+            (DOSBootBase->bm_BootNode == bn) ? '*' : IsBootableNode(bn) ? '+' : ' ',
             AROS_BSTR_ADDR(dn->dn_Name),
             bn->bn_Node.ln_Pri,
             AROS_BSTR_ADDR(fssm->fssm_Device),
             fssm->fssm_Unit);
         Move(win->RPort, 0 + xoff, y);
         //Text(win->RPort, text, strlen(text));
-        SetAPen(win->RPort, 2);
+        SetAPen(win->RPort, 3);
         Text(win->RPort, text, 12);
 
         textp = NULL;
@@ -387,7 +369,7 @@ static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
 
             for (i = 0; i < 4; i++) {
                 dostype[i] = (de->de_DosType >> ((3 - i) * 8)) & 0xff;
-                //if (dostype[i] < 9) oryginal
+                //if (dostype[i] < 9) oryginał
                 if (dostype[i] < 12)
                     dostype[i] += '0';
                 else if (dostype[i] < 32)
@@ -419,7 +401,6 @@ static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
             textp = "[no media]";
         }
         if (textp) {
-            SetAPen(win->RPort, 3);
             Move(win->RPort, 255+ xoff, y);
             Text(win->RPort, textp, 4);
             //Text(win->RPort, textp, strlen(textp));
@@ -428,9 +409,7 @@ static void initPageBoot(LIBBASETYPEPTR DOSBootBase)
         y += 12;
                
     }
-    
 }
-
 
 static void centertext(LIBBASETYPEPTR DOSBootBase, BYTE pen, WORD y, const char *text)
 {
@@ -449,76 +428,14 @@ static void writetext(LIBBASETYPEPTR DOSBootBase, BYTE pen, WORD x, WORD y, cons
 
 static void initPage(LIBBASETYPEPTR DOSBootBase, WORD page)
 {
-
-<<<<<<< HEAD
-    UWORD waitPointer[] =
-=======
-    if (page == PAGE_DISPLAY)
-            text = "Display Options";
-    else if (page == PAGE_EXPANSION)
-            text = "Expansion Board Diagnostic";
-    else if (page == PAGE_BOOT)
-        text = "Boot Options";
-    else
-        text = "ApolloOS Early Startup Control";
-    centertext(DOSBootBase, 2, 10, text);
-    
-    if (page == PAGE_BOOT)
->>>>>>> 59502eb0b729d14f9188d4323d0ae42619547619
-    {
-    0x0000, 0x0000,     /* reserved, must be NULL */
-
-     0x0080, 0x0000, 
-	 0x0080, 0x0000,
-	 0x0080, 0x0000, 
-	 0x0080, 0x0000, 
-	 0x07F0, 0x0000, 
-	 0x0550, 0x0000, 
-	 0x1EBC, 0x0000, 
-	 0x1BFC, 0x0000, 
-	 0x15D4, 0x0000, 
-	 0x39CE, 0x0000, 
-	 0x380E, 0x0000, 
-	 0x0000, 0x0000, 
-
-    /*
-    0x0400, 0x07C0,
-    0x0000, 0x07C0,
-    0x0100, 0x0380,
-    0x0000, 0x07E0,
-    0x07C0, 0x1FF8,
-    0x1FF0, 0x3FEC,
-    0x3FF8, 0x7FDE,
-    0x3FF8, 0x7FBE,
-    0x7FFC, 0xFF7F,
-    0x7EFC, 0xFFFF,
-    0x7FFC, 0xFFFF,
-    0x3FF8, 0x7FFE,
-    0x3FF8, 0x7FFE,
-    0x1FF0, 0x3FFC,
-    0x07C0, 0x1FF8,
-    0x0000, 0x07E0,
-    */
-
-    0x0000, 0x0000,     /* reserved, must be NULL */
-    };
-
     UBYTE *text;
 
-     //if (page == PAGE_HELP)
-            //text = "HELP";
-
     text = "Vampire Bootloader Early Startup Control";
-
     centertext(DOSBootBase, 2, 10, text);
-
-    //if (page == PAGE_HELP)
-        //initPageHelp(DOSBootBase);
   
     if (page == PAGE_MAIN && (GfxBase->DisplayFlags & (NTSC | PAL))) {
             ULONG modeid = GetVPModeID(&DOSBootBase->bm_Screen->ViewPort);
             if (modeid != INVALID_ID && (((modeid & MONITOR_ID_MASK) == NTSC_MONITOR_ID) || ((modeid & MONITOR_ID_MASK) == PAL_MONITOR_ID))) {
-<<<<<<< HEAD
            // centertext(DOSBootBase, 1, 22, "(Core Release 6 build 8923, 2021-03-28)");
             //writetext(DOSBootBase, 3, 0, 65, "BOOT:");
             //writetext(DOSBootBase, 3, 0, 77, "DH0:");
@@ -530,24 +447,18 @@ static void initPage(LIBBASETYPEPTR DOSBootBase, WORD page)
             //writetext(DOSBootBase, 3, 0, 149, "DH8:");
             //writetext(DOSBootBase, 3, 0, 161, "DH9:");
             //writetext(DOSBootBase, 3, 0, 173, "DH10:");
-            writetext(DOSBootBase, 2, 343, 68, "Boot from Floppy"); //2 white
-            writetext(DOSBootBase, 2, 310, 120, "DF0:");
-            writetext(DOSBootBase, 2, 310, 132, "DF:");
-            writetext(DOSBootBase, 2, 310, 144, "DF2:");
-            writetext(DOSBootBase, 2, 310, 156, "DF3:");
-            writetext(DOSBootBase, 2, 310, 168, "ROM:");
-            writetext(DOSBootBase, 2, 130, 240, "SpaceBar toggle between PAL and NTSC");
+            //writetext(DOSBootBase, 3, 0, 185, "SD CARD:");
+            writetext(DOSBootBase, 3, 310, 120, "DF0:");
+            writetext(DOSBootBase, 3, 310, 132, "DF1:");
+            writetext(DOSBootBase, 3, 310, 144, "DF2:");
+            writetext(DOSBootBase, 3, 310, 156, "DF3:");
+            writetext(DOSBootBase, 3, 310, 168, "ROM:");
+            writetext(DOSBootBase, 3, 130, 240, "SpaceBar toggle between PAL and NTSC");
 
         initPageBoot(DOSBootBase);
-        //centertext(DOSBootBase, 1, 34, "Press A-J to select boot device");
-        //centertext(DOSBootBase, 3, 46, "\"+\" are bootable, \"*\" => selected for boot");
-        centertext(DOSBootBase, 1, 24, "(Core Release 6 build 8A2C, 2021-04-01)");
-            //centertext(DOSBootBase, 3, 240, "SpaceBar toggle between PAL and NTSC:"); 
-            SetPointer(DOSBootBase->bm_Window, waitPointer, 12, 16, -6, 0);
-
-=======
-            centertext(DOSBootBase, 1, 30, "(Release 6, 2021-04-08)");
->>>>>>> 59502eb0b729d14f9188d4323d0ae42619547619
+        centertext(DOSBootBase, 1, 34, "Press A-J to select boot device");
+        centertext(DOSBootBase, 3, 46, "\"+\" are bootable, \"*\" => selected for boot");
+            //centertext(DOSBootBase, 3, 240, "SpaceBar toggle between PAL and NTSC:");        
         }
     }    
 
@@ -557,7 +468,7 @@ static WORD initWindow(LIBBASETYPEPTR DOSBootBase, struct BootConfig *bcfg, WORD
 {
     struct Gadget *first = NULL;
     WORD newpage = -1;
-   
+
     if ((first = createGadgets(DOSBootBase, page)) != NULL)
     {
         struct NewWindow nw =

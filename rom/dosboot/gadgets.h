@@ -20,20 +20,17 @@ struct MainGadgets {
 	struct ButtonGadget *boot;
 	struct ButtonGadget *bootnss;
 	struct ButtonGadget *bootopt;
+	struct ButtonGadget *help;
 	struct ButtonGadget *displayopt;
-	struct ButtonGadget *expboarddiag;
-	struct ButtonGadget *use;
-	struct ButtonGadget *cancel;
+
 };
 
 #define BUTTON_BOOT            1
 #define BUTTON_BOOT_WNSS       2
 #define BUTTON_BOOT_OPTIONS    3
-#define BUTTON_DISPLAY_OPTIONS 4
-#define BUTTON_EXPBOARDDIAG    5
-#define BUTTON_USE             6
-#define BUTTON_CANCEL          7
-#define BUTTON_CONTINUE        8
+#define BUTTON_HELP 		   4
+
+
 
 struct ButtonGadget *createButton(ULONG, ULONG, ULONG, ULONG, struct Gadget *, STRPTR, UWORD, struct DOSBootBase *);
 void freeButtonGadget(struct ButtonGadget *, struct DOSBootBase *);
