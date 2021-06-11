@@ -200,7 +200,7 @@ static void freeGadgets(LIBBASETYPEPTR DOSBootBase, WORD page)
 {
     if (page == PAGE_MAIN)
         freeGadgetsBoot(DOSBootBase);
-    }
+        
 
 
 
