@@ -450,21 +450,8 @@ static void writetext(LIBBASETYPEPTR DOSBootBase, BYTE pen, WORD x, WORD y, cons
 static void initPage(LIBBASETYPEPTR DOSBootBase, WORD page)
 {
 
-<<<<<<< HEAD
     UWORD waitPointer[] =
-=======
-    if (page == PAGE_DISPLAY)
-            text = "Display Options";
-    else if (page == PAGE_EXPANSION)
-            text = "Expansion Board Diagnostic";
-    else if (page == PAGE_BOOT)
-        text = "Boot Options";
-    else
-        text = "ApolloOS Early Startup Control";
-    centertext(DOSBootBase, 2, 10, text);
-    
-    if (page == PAGE_BOOT)
->>>>>>> 59502eb0b729d14f9188d4323d0ae42619547619
+
     {
     0x0000, 0x0000,     /* reserved, must be NULL */
 
@@ -545,9 +532,9 @@ static void initPage(LIBBASETYPEPTR DOSBootBase, WORD page)
             //centertext(DOSBootBase, 3, 240, "SpaceBar toggle between PAL and NTSC:"); 
             SetPointer(DOSBootBase->bm_Window, waitPointer, 12, 16, -6, 0);
 
-=======
+
             centertext(DOSBootBase, 1, 30, "(Release 6, 2021-04-08)");
->>>>>>> 59502eb0b729d14f9188d4323d0ae42619547619
+
         }
     }    
 
