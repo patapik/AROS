@@ -41,3 +41,13 @@ or
 or
 	for the ROM: 
 13. sudo ./mkapollo.sh --jobs=8 kernel
+
+I made few new features you can check them there:
+
+SD boot, Vfloppy boot, new Early Startup control ,new ROM
+
+https://youtu.be/uOaze27mLO8
+https://youtu.be/kLf7mrq89QU
+https://youtu.be/g_hu9dygx7M
+
+
