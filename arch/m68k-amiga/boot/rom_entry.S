@@ -1,6 +1,6 @@
 
-Version = 46
-Revision= 12
+Version = 1
+Revision= 1
 
 	.text
 
@@ -24,9 +24,9 @@ software_reset:
     .word Revision
     .word 0xffff
     .word 0xffff
-    .asciz "AROS ROM Operating System and Libraries"
-    .asciz "Copyright \251 1995-2020 "
-    .asciz "The AROS Development Team, "
+    .asciz "PATAPIK's AMIGA ROM"
+    .asciz "Copyright 2021 "
+    .asciz "The Patapik&Patapusia "
     .asciz "All Rights Reserved."
     .asciz ADATE
 
