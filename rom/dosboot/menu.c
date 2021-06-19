@@ -450,6 +450,21 @@ static void writetext(LIBBASETYPEPTR DOSBootBase, BYTE pen, WORD x, WORD y, cons
 static void initPage(LIBBASETYPEPTR DOSBootBase, WORD page)
 {
 
+<<<<<<< HEAD
+    UWORD waitPointer[] =
+=======
+    if (page == PAGE_DISPLAY)
+            text = "Display Options";
+    else if (page == PAGE_EXPANSION)
+            text = "Expansion Board Diagnostic";
+    else if (page == PAGE_BOOT)
+        text = "Boot Options";
+    else
+        text = "ApolloOS Early Startup Control";
+    centertext(DOSBootBase, 2, 10, text);
+    
+    if (page == PAGE_BOOT)
+>>>>>>> 59502eb0b729d14f9188d4323d0ae42619547619
     {
     0x0000, 0x0000,     /* reserved, must be NULL */
 
