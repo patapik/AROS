@@ -46,8 +46,10 @@ I made few new features you can check them there:
 
 SD boot, Vfloppy boot, new Early Startup control ,new ROM
 
-https://youtu.be/uOaze27mLO8
-https://youtu.be/kLf7mrq89QU
-https://youtu.be/g_hu9dygx7M
+[Video1](https://youtu.be/uOaze27mLO8)
+
+[Video2](https://youtu.be/kLf7mrq89QU)
+
+[Video3](https://youtu.be/g_hu9dygx7M)
 
 
