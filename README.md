@@ -46,10 +46,10 @@ I made few new features you can check them there:
 
 SD boot, Vfloppy boot, new Early Startup control ,new ROM
 
-[Video1](https://youtu.be/uOaze27mLO8)
+[Video1](https://youtu.be/uOaze27mLO8)  Vanpire V4 SD Boot
 
-[Video2](https://youtu.be/kLf7mrq89QU)
+[Video2](https://youtu.be/kLf7mrq89QU)  Virtual floppy Boot
 
-[Video3](https://youtu.be/g_hu9dygx7M)
+[Video3](https://youtu.be/g_hu9dygx7M)  Virtual floppy Speed
 
 
